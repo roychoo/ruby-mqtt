@@ -245,7 +245,8 @@ class MQTT::Client
 
     if not connected?
       # Create network socket
-      tcp_socket = @socket_class.new(@host, @port)
+      socket_class = @socket_class || TCPSocket
+      tcp_socket = socket_class.new(@host, @port)
 
       if @ssl
         # Set the protocol version
@@ -253,7 +254,8 @@ class MQTT::Client
           ssl_context.ssl_version = @ssl
         end
 
-        @socket = @ssl_socket_class.new(tcp_socket, ssl_context)
+        ssl_socket_class = @ssl_socket_class || OpenSSL::SSL::SSLSocket
+        @socket = ssl_socket_class.new(tcp_socket, ssl_context)
         @socket.sync_close = true
         @socket.connect
       else
