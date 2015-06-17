@@ -56,6 +56,8 @@ class MQTT::Client
   #Last ping response time
   attr_reader :last_ping_response
 
+  attr_accessor :socket_class
+  attr_accessor :ssl_socket_class
 
   # Timeout between select polls (in seconds)
   SELECT_TIMEOUT = 0.5
@@ -159,6 +161,8 @@ class MQTT::Client
       attr.merge!(:port => args[1]) unless args[1].nil?
     end
 
+    p attr
+
     if args.length >= 3
       raise ArgumentError, "Unsupported number of arguments"
     end
@@ -241,7 +245,7 @@ class MQTT::Client
 
     if not connected?
       # Create network socket
-      tcp_socket = TCPSocket.new(@host, @port)
+      tcp_socket = @socket_class.new(@host, @port)
 
       if @ssl
         # Set the protocol version
@@ -249,7 +253,7 @@ class MQTT::Client
           ssl_context.ssl_version = @ssl
         end
 
-        @socket = OpenSSL::SSL::SSLSocket.new(tcp_socket, ssl_context)
+        @socket = @ssl_socket_class.new(tcp_socket, ssl_context)
         @socket.sync_close = true
         @socket.connect
       else
@@ -553,4 +557,11 @@ private
     self.port = args
   end
 
+  def socket_class
+    socket_class
+  end
+
+  def ssl_socket_class
+    ssl_socket_class
+  end
 end
