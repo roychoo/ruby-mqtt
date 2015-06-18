@@ -1,9 +1,12 @@
 autoload :OpenSSL, 'openssl'
 autoload :URI, 'uri'
 
+require 'celluloid/io'
+require 'celluloid/autostart'
 
 # Client class for talking to an MQTT server
 class MQTT::Client
+  include Celluloid::IO
   # Hostname of the remote server
   attr_accessor :host
 
@@ -246,7 +249,7 @@ class MQTT::Client
     if not connected?
       # Create network socket
       socket_class = @socket_class || TCPSocket
-      tcp_socket = socket_class.new(@host, @port)
+      tcp_socket = socket_class.open(@host, @port)
 
       if @ssl
         # Set the protocol version
@@ -255,7 +258,7 @@ class MQTT::Client
         end
 
         ssl_socket_class = @ssl_socket_class || OpenSSL::SSL::SSLSocket
-        @socket = ssl_socket_class.new(tcp_socket, ssl_context)
+        @socket = ssl_socket_class.open(tcp_socket, ssl_context)
         @socket.sync_close = true
         @socket.connect
       else
@@ -283,14 +286,45 @@ class MQTT::Client
       receive_connack
 
       # Start packet reading thread
-      @read_thread = Thread.new(Thread.current) do |parent|
-        Thread.current[:parent] = parent
-        while connected? do
-          receive_packet
-        end
-      end
+      # @read_thread = Thread.new(Thread.current) do |parent|
+      #   Thread.current[:parent] = parent
+      #   while connected? do
+      #     # receive_packet
+      #     handle_connection
+      #   end
+      # end
+      # while connected? do
+        # receive_packet
+      async.run
+      # end
     end
 
+    def run
+      loop { 
+        if connected?
+          async.handle_connection 
+        end
+      }
+    end
+
+    def handle_connection
+        puts "*** Received connection from #{host}:#{port}"
+        loop {
+          packet = MQTT::Packet.read(@socket)
+          if packet.class == MQTT::Packet::Publish
+            # Add to queue
+            @read_queue.push(packet)
+          elsif packet.class == MQTT::Packet::Pingresp
+            @last_ping_response = Time.now
+          else
+            # Ignore all other packets
+            nil
+          end
+        }
+    rescue EOFError
+      puts "*** #{host}:#{port} disconnected"
+      socket.close
+    end
     # If a block is given, then yield and disconnect
     if block_given?
       yield(self)
